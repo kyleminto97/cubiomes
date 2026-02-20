@@ -204,23 +204,13 @@ int getStructureConfig(int structureType, int mc, StructureConfig *sconf)
 static inline
 void getRegPos(Pos *p, uint64_t *s, int rx, int rz, StructureConfig sc)
 {
-    setSeed(s, rx*REGION_SEED_X_PRIME + rz*REGION_SEED_Z_PRIME + *s + sc.salt);
+    setSeed(s, rx*341873128712ULL + rz*132897987541ULL + *s + sc.salt);
     p->x = ((uint64_t)rx * sc.regionSize + nextInt(s, sc.chunkRange)) << 4;
     p->z = ((uint64_t)rz * sc.regionSize + nextInt(s, sc.chunkRange)) << 4;
 }
 
 int getStructurePos(int structureType, int mc, uint64_t seed, int regX, int regZ, Pos *pos)
 {
-    // CRITICAL FIX: Validate input parameters to prevent integer overflow
-    // Check for extreme coordinate values that could cause overflow
-    if (regX < INT_MIN/32 || regX > INT_MAX/32 || 
-        regZ < INT_MIN/32 || regZ > INT_MAX/32)
-    {
-        fprintf(stderr, "getStructurePos: Region coordinates out of safe range: (%d, %d)\n", 
-                regX, regZ);
-        return 0;
-    }
-    
     StructureConfig sconf;
 #if STRUCT_CONFIG_OVERRIDE
     if (!getStructureConfig_override(structureType, mc, &sconf))
@@ -266,7 +256,7 @@ int getStructurePos(int structureType, int mc, uint64_t seed, int regX, int regZ
     case Treasure:
         pos->x = regX * 16 + 9;
         pos->z = regZ * 16 + 9;
-        seed = regX*REGION_SEED_X_PRIME + regZ*REGION_SEED_Z_PRIME + seed + sconf.salt;
+        seed = regX*341873128712ULL + regZ*132897987541ULL + seed + sconf.salt;
         setSeed(&seed, seed);
         return nextFloat(&seed) < 0.01;
 

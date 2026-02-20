@@ -83,30 +83,14 @@ int32_t floordiv(int32_t a, int32_t b)
 ///                    C implementation of Java Random
 ///=============================================================================
 
-// CODE QUALITY FIX: Define magic numbers as named constants
-// Java Random constants (from java.util.Random)
-#define JAVA_RNG_MULTIPLIER 0x5deece66dULL
-#define JAVA_RNG_ADDEND     0xbULL
-#define JAVA_RNG_MASK       ((1ULL << 48) - 1)
-
-// Structure seed generation constants (Minecraft-specific primes)
-#define REGION_SEED_X_PRIME 341873128712ULL
-#define REGION_SEED_Z_PRIME 132897987541ULL
-
-// End island generation constants
-#define END_ISLAND_X_FACTOR 3439ULL
-#define END_ISLAND_Z_FACTOR 147ULL
-#define END_ISLAND_MODULO   13
-#define END_ISLAND_OFFSET   9
-
 static inline void setSeed(uint64_t *seed, uint64_t value)
 {
-    *seed = (value ^ JAVA_RNG_MULTIPLIER) & JAVA_RNG_MASK;
+    *seed = (value ^ 0x5deece66d) & ((1ULL << 48) - 1);
 }
 
 static inline int next(uint64_t *seed, const int bits)
 {
-    *seed = (*seed * JAVA_RNG_MULTIPLIER + JAVA_RNG_ADDEND) & JAVA_RNG_MASK;
+    *seed = (*seed * 0x5deece66d + 0xb) & ((1ULL << 48) - 1);
     return (int) ((int64_t)*seed >> (48 - bits));
 }
 
@@ -152,9 +136,9 @@ static inline double nextDouble(uint64_t *seed)
  */
 #define JAVA_NEXT_INT24(S,X)                \
     do {                                    \
-        uint64_t a = JAVA_RNG_MASK;         \
-        uint64_t c = JAVA_RNG_MULTIPLIER * (S); \
-        c += JAVA_RNG_ADDEND; a &= c;       \
+        uint64_t a = (1ULL << 48) - 1;      \
+        uint64_t c = 0x5deece66dULL * (S);  \
+        c += 11; a &= c;                    \
         (S) = a;                            \
         a = (uint64_t) ((int64_t)a >> 17);  \
         c = 0xaaaaaaab * a;                 \
@@ -169,8 +153,8 @@ static inline void skipNextN(uint64_t *seed, uint64_t n)
 {
     uint64_t m = 1;
     uint64_t a = 0;
-    uint64_t im = JAVA_RNG_MULTIPLIER;
-    uint64_t ia = JAVA_RNG_ADDEND;
+    uint64_t im = 0x5deece66dULL;
+    uint64_t ia = 0xb;
     uint64_t k;
 
     for (k = n; k; k >>= 1)

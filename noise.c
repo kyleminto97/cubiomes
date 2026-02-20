@@ -4,11 +4,6 @@
 #include <math.h>
 #include <stdio.h>
 
-// PERFORMANCE FIX: SIMD support for vectorized noise sampling
-#ifdef __AVX2__
-#include <immintrin.h>
-#endif
-
 // grad()
 #if 0
 static double indexedLerp(int idx, double d1, double d2, double d3)
@@ -154,13 +149,6 @@ double samplePerlin(const PerlinNoise *noise, double d1, double d2, double d3,
 
     const uint8_t *idx = noise->d;
 
-    // PERFORMANCE FIX: Prefetch permutation table entries to reduce cache miss latency
-    // Note: Only beneficial on systems with hardware prefetching support
-    #if defined(__GNUC__) && !defined(_WIN32)
-    __builtin_prefetch(&idx[h1], 0, 3);
-    __builtin_prefetch(&idx[h1+1], 0, 3);
-    #endif
-
 #if 1
     // try to promote optimizations that can utilize the {xh, xl} registers
     typedef struct vec2 { uint8_t a, b; } vec2;
@@ -218,44 +206,6 @@ double samplePerlin(const PerlinNoise *noise, double d1, double d2, double d3,
 
     return lerp(t3, l1, l5);
 }
-
-// PERFORMANCE FIX: SIMD vectorized batch processing for AVX2 (15-25% speedup)
-#ifdef __AVX2__
-void samplePerlinBatch_AVX2(
-    const PerlinNoise *noise,
-    double *out,
-    const double *x,
-    const double *y,
-    const double *z,
-    int count,
-    double yamp,
-    double ymin)
-{
-    // Process 4 samples at a time using AVX2
-    int i;
-    for (i = 0; i + 3 < count; i += 4)
-    {
-        // Load 4 coordinates
-        __m256d vx = _mm256_loadu_pd(&x[i]);
-        __m256d vy = _mm256_loadu_pd(&y[i]);
-        __m256d vz = _mm256_loadu_pd(&z[i]);
-        
-        // For simplicity, fall back to scalar for now
-        // Full SIMD implementation would vectorize the entire gradient computation
-        // This provides infrastructure for future optimization
-        out[i+0] = samplePerlin(noise, x[i+0], y[i+0], z[i+0], yamp, ymin);
-        out[i+1] = samplePerlin(noise, x[i+1], y[i+1], z[i+1], yamp, ymin);
-        out[i+2] = samplePerlin(noise, x[i+2], y[i+2], z[i+2], yamp, ymin);
-        out[i+3] = samplePerlin(noise, x[i+3], y[i+3], z[i+3], yamp, ymin);
-    }
-    
-    // Handle remaining samples
-    for (; i < count; i++)
-    {
-        out[i] = samplePerlin(noise, x[i], y[i], z[i], yamp, ymin);
-    }
-}
-#endif
 
 static
 void samplePerlinBeta17Terrain(const PerlinNoise *noise, double *v,
@@ -501,20 +451,13 @@ double sampleOctaveAmp(const OctaveNoise *noise, double x, double y, double z,
 {
     double v = 0;
     int i;
-    
-    // PERFORMANCE FIX: Parallelize octave processing on multi-core systems (4-8x speedup)
-    // Only parallelize if we have enough octaves to make it worthwhile (threshold: 8 octaves)
-    #ifdef _OPENMP
-    #pragma omp parallel for reduction(+:v) if(noise->octcnt >= 8)
-    #endif
     for (i = 0; i < noise->octcnt; i++)
     {
         PerlinNoise *p = noise->octaves + i;
         double lf = p->lacunarity;
-        // PERFORMANCE FIX: Remove no-op maintainPrecision calls (~5% speedup)
-        double ax = x * lf;
-        double ay = ydefault ? -p->b : y * lf;
-        double az = z * lf;
+        double ax = maintainPrecision(x * lf);
+        double ay = ydefault ? -p->b : maintainPrecision(y * lf);
+        double az = maintainPrecision(z * lf);
         double pv = samplePerlin(p, ax, ay, az, yamp * lf, ymin * lf);
         v += p->amplitude * pv;
     }
@@ -525,20 +468,13 @@ double sampleOctave(const OctaveNoise *noise, double x, double y, double z)
 {
     double v = 0;
     int i;
-    
-    // PERFORMANCE FIX: Parallelize octave processing on multi-core systems (4-8x speedup)
-    // Only parallelize if we have enough octaves (threshold: 8 octaves)
-    #ifdef _OPENMP
-    #pragma omp parallel for reduction(+:v) if(noise->octcnt >= 8)
-    #endif
     for (i = 0; i < noise->octcnt; i++)
     {
         PerlinNoise *p = noise->octaves + i;
         double lf = p->lacunarity;
-        // PERFORMANCE FIX: Remove no-op maintainPrecision calls (~5% speedup)
-        double ax = x * lf;
-        double ay = y * lf;
-        double az = z * lf;
+        double ax = maintainPrecision(x * lf);
+        double ay = maintainPrecision(y * lf);
+        double az = maintainPrecision(z * lf);
         double pv = samplePerlin(p, ax, ay, az, 0, 0);
         v += p->amplitude * pv;
     }
@@ -553,9 +489,8 @@ double sampleOctaveBeta17Biome(const OctaveNoise *noise, double x, double z)
     {
         PerlinNoise *p = noise->octaves + i;
         double lf = p->lacunarity;
-        // PERFORMANCE FIX: Remove no-op maintainPrecision calls (~5% speedup)
-        double ax = x * lf + p->a;
-        double az = z * lf + p->b;
+        double ax = maintainPrecision(x * lf) + p->a;
+        double az = maintainPrecision(z * lf) + p->b;
         double pv = sampleSimplex2D(p, ax, az);
         v += p->amplitude * pv;
     }
@@ -574,9 +509,8 @@ void sampleOctaveBeta17Terrain(const OctaveNoise *noise, double *v,
         double lf = p->lacunarity;
         if (lacmin && lf > lacmin)
             continue;
-        // PERFORMANCE FIX: Remove no-op maintainPrecision calls (~5% speedup)
-        double ax = x * lf;
-        double az = z * lf;
+        double ax = maintainPrecision(x * lf);
+        double az = maintainPrecision(z * lf);
         samplePerlinBeta17Terrain(p, v, ax, az, yLacFlag ? 0.5 : 1.0);
     }
 }
