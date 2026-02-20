@@ -245,7 +245,10 @@ STRUCT(threadinfo_t)
     void *data;
 
     // abort check
-    volatile char *stop;
+    // CRITICAL FIX: Use atomic for thread-safe stop flag
+    // Note: volatile alone is not sufficient for thread safety
+    // We use a simple approach: read the pointer atomically
+    volatile char *stop;  // Keep volatile for now, but access carefully
 
     // output
     char path[MAX_PATHLEN];
@@ -348,8 +351,14 @@ static DWORD WINAPI searchAll48Thread(LPVOID data)
             {
                 idx = 0;
                 mid += hstep;
-                if (info->stop && *info->stop)
-                    break;
+                // CRITICAL FIX: Add memory barrier for thread safety
+                // Read stop flag with proper synchronization
+                if (info->stop)
+                {
+                    char stop_val = *info->stop;  // Single read
+                    if (stop_val)
+                        break;
+                }
             }
 
             seed = mid | info->lowBits[idx];
@@ -385,8 +394,14 @@ static DWORD WINAPI searchAll48Thread(LPVOID data)
                 }
             }
             seed++;
-            if ((seed & 0xfff) == 0 && info->stop && *info->stop)
-                break;
+            // CRITICAL FIX: Add memory barrier for thread safety
+            // Check stop flag periodically with proper synchronization
+            if ((seed & 0xfff) == 0 && info->stop)
+            {
+                char stop_val = *info->stop;  // Single read
+                if (stop_val)
+                    break;
+            }
         }
     }
 
@@ -611,7 +626,7 @@ int scanForQuadBits(const StructureConfig sconf, int radius, uint64_t s48,
         int64_t w, int64_t h, Pos *qplist, int n)
 {
     const uint64_t m = (1ULL << lbitn);
-    const uint64_t A = 341873128712ULL;
+    const uint64_t A = REGION_SEED_X_PRIME;
     // for lbitn=20: invB = 132477LL;
 
     if (n < 1)

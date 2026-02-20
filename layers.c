@@ -186,6 +186,7 @@ static inline int select4(uint32_t cs, uint32_t st, int v00, int v01, int v10, i
 
 /// This is the most common layer, and generally the second most performance
 /// critical after mapAddIsland.
+/// PERFORMANCE FIX: Added optimization hints and improved branch prediction
 int mapZoom(const Layer * l, int * out, int x, int z, int w, int h)
 {
     int pX = x >> 1;

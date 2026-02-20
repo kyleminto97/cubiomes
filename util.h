@@ -25,6 +25,10 @@ const char* mc2str(int mc);
 int str2mc(const char *s);
 
 /// get the resource id name for a biome (for versions 1.13+)
+/// CRITICAL FIX: Returns pointer to static read-only string
+/// WARNING: Do NOT free() the returned pointer
+/// WARNING: Do NOT modify the returned string
+/// The returned string is valid for the lifetime of the program
 const char *biome2str(int mc, int id);
 
 /// get the resource id name for a structure

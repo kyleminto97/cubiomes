@@ -85,13 +85,17 @@ int *allocCache(const Generator *g, Range r);
  * The required length of the cache can be determined with getMinCacheSize().
  *
  * The return value is zero upon success.
+ * PERFORMANCE FIX: Marked as hot function for optimization
  */
+ATTR(hot)
 int genBiomes(const Generator *g, int *cache, Range r);
 /**
  * Gets the biome for a specified scaled position. Note that the scale should
  * be either 1 or 4, for block or biome coordinates respectively.
  * Returns none (-1) upon failure.
+ * PERFORMANCE FIX: Marked as hot function for optimization
  */
+ATTR(hot)
 int getBiomeAt(const Generator *g, int scale, int x, int y, int z);
 
 /**
